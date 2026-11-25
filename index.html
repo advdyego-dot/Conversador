@@ -1,0 +1,370 @@
+<title>Conversador</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one column, two big speaker buttons (you / the other person), then the running transcript. */
+:root {
+  --bg: #f3f6f7; --surface: #ffffff; --ink: #14232b; --muted: #5b6d76; --line: #d8e1e5;
+  --me: #0f6e74; --me-soft: #dff0f0; --them: #b4542b; --them-soft: #f8e7dd; --live: #d23c3c;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f171b; --surface: #172329; --ink: #e6eef1; --muted: #93a6ae; --line: #26363e;
+  --me: #49b8bd; --me-soft: #163437; --them: #ec8a5d; --them-soft: #3a2419; --live: #ff6b6b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f171b; --surface: #172329; --ink: #e6eef1; --muted: #93a6ae; --line: #26363e;
+  --me: #49b8bd; --me-soft: #163437; --them: #ec8a5d; --them-soft: #3a2419; --live: #ff6b6b; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 680px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-size: 1.7rem; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: 0.9rem; }
+
+.langs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.langs label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+select, textarea, button { font: inherit; color: inherit; }
+select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pad { border: 2px solid transparent; border-radius: 16px; padding: 18px 14px; min-height: 150px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  transition: transform .12s ease, border-color .12s ease; }
+.pad:active { transform: scale(0.98); }
+.pad:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.pad.me { background: var(--me-soft); color: var(--me); }
+.pad.them { background: var(--them-soft); color: var(--them); }
+.pad .who { font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
+.pad .hint { font-size: 0.82rem; color: var(--muted); }
+.pad svg { width: 38px; height: 38px; }
+.pad.on { border-color: var(--live); }
+.pad.on svg { color: var(--live); animation: pulse 1.1s ease-in-out infinite; }
+.pad[disabled] { opacity: .45; cursor: default; }
+@keyframes pulse { 50% { transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .pad.on svg { animation: none; } .pad { transition: none; } }
+
+.status { min-height: 1.5em; font-size: 0.92rem; color: var(--muted); }
+.status.live { color: var(--live); font-weight: 600; }
+.live-text { font-size: 1.05rem; min-height: 1.5em; }
+.live-text .partial { color: var(--muted); }
+
+.notice { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 0.9rem; }
+.typed { display: flex; flex-direction: column; gap: 8px; }
+.typed textarea { width: 100%; min-height: 70px; resize: vertical; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.btn.primary { background: var(--me); border-color: var(--me); color: var(--bg); font-weight: 600; }
+.btn.alt { background: var(--them); border-color: var(--them); color: var(--bg); font-weight: 600; }
+.btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+summary { cursor: pointer; font-weight: 600; }
+.settings { display: grid; gap: 10px; padding-top: 10px; }
+.settings label { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+input[type=range] { accent-color: var(--me); }
+
+.log-head { display: flex; justify-content: space-between; align-items: center; }
+.log-head h2 { font-family: var(--display); font-size: 1.05rem; margin: 0; }
+.log { display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; border-left: 4px solid var(--me); min-width: 0; }
+.card.them { border-left-color: var(--them); }
+.card .orig { color: var(--muted); font-size: 0.88rem; overflow-wrap: anywhere; }
+.card .tr { font-size: 1.12rem; font-weight: 500; margin-top: 4px; overflow-wrap: anywhere; }
+.card .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 8px; }
+.tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.play { border: none; background: none; color: var(--me); cursor: pointer; font-weight: 600; padding: 2px 4px; }
+.card.them .play { color: var(--them); }
+.empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Conversador</h1>
+      <p class="sub">Fale, faça uma pausa e ouça a tradução.</p>
+    </div>
+    <div class="langs">
+      <label for="other">Outra língua</label>
+      <select id="other">
+        <option value="en">Inglês</option>
+        <option value="es">Espanhol</option>
+        <option value="fr">Francês</option>
+        <option value="it">Italiano</option>
+        <option value="de">Alemão</option>
+        <option value="zh">Chinês</option>
+        <option value="ja">Japonês</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="pads">
+    <button class="pad me" id="padMe" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      <span class="who">Eu falo</span>
+      <span class="hint" id="hintMe">Português → Inglês</span>
+    </button>
+    <button class="pad them" id="padThem" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      <span class="who" id="whoThem">Other person</span>
+      <span class="hint" id="hintThem">Inglês → Português</span>
+    </button>
+  </div>
+
+  <div>
+    <div class="status" id="status" aria-live="polite">Toque em quem vai falar.</div>
+    <div class="live-text" id="liveText"></div>
+  </div>
+
+  <div class="notice" id="noMic" hidden>
+    O microfone desta página funciona no Chrome (computador ou Android) e no app Claude para computador.
+    Aqui, digite ou use o microfone do próprio teclado no campo abaixo.
+  </div>
+
+  <form class="typed" id="typedForm">
+    <label for="typed" class="tag">Ou digite</label>
+    <textarea id="typed" placeholder="Escreva aqui a frase a traduzir"></textarea>
+    <div class="row">
+      <button class="btn primary" type="submit" data-side="me" id="sendMe">Traduzir o que eu disse</button>
+      <button class="btn alt" type="submit" data-side="them" id="sendThem">Traduzir o que a outra pessoa disse</button>
+    </div>
+  </form>
+
+  <details>
+    <summary>Ajustes</summary>
+    <div class="settings">
+      <label for="pause">Pausa que encerra a fala <span><input type="range" id="pause" min="0.8" max="3" step="0.1" value="1.5"> <b id="pauseVal">1,5 s</b></span></label>
+      <label for="rate">Velocidade da voz <span><input type="range" id="rate" min="0.7" max="1.3" step="0.05" value="1"> <b id="rateVal">1,0×</b></span></label>
+      <label for="voice">Voz
+        <select id="voice"><option value="buttery">Voz 1</option><option value="airy">Voz 2</option><option value="glassy">Voz 3</option><option value="rounded">Voz 4</option></select>
+      </label>
+    </div>
+  </details>
+
+  <section>
+    <div class="log-head"><h2>Conversa</h2><button class="btn" type="button" id="clear">Limpar</button></div>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const LANGS = {
+    pt: { name: "Português", tts: "pt-BR", dict: "pt-BR", label: "Eu falo" },
+    en: { name: "Inglês", english: "English", tts: "en", dict: "en-US", label: "Other person" },
+    es: { name: "Espanhol", english: "Spanish", tts: "es", dict: "es", label: "Otra persona" },
+    fr: { name: "Francês", english: "French", tts: "fr", dict: "fr", label: "L'autre personne" },
+    it: { name: "Italiano", english: "Italian", tts: "it", dict: "it", label: "L'altra persona" },
+    de: { name: "Alemão", english: "German", tts: "de", dict: "de", label: "Die andere Person" },
+    zh: { name: "Chinês", english: "Mandarin Chinese (simplified)", tts: "zh", dict: "zh", label: "对方" },
+    ja: { name: "Japonês", english: "Japanese", tts: "ja", dict: "ja", label: "相手の方" },
+  };
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  let D = null, T = null, S = null;        // dictation, tts, sample
+  let cur = null;                          // the turn being dictated
+  let silenceTimer = null;
+  let working = false;
+  const noLangFor = {};                    // dictation languages that were refused
+  let log = store.get("conv.log", []);
+
+  const other = () => $("other").value;
+  const dir = (side) => side === "me" ? { from: "pt", to: other() } : { from: other(), to: "pt" };
+
+  // ---------- UI ----------
+  function setStatus(text, live) { $("status").textContent = text; $("status").classList.toggle("live", !!live); }
+  function updateLabels() {
+    const o = LANGS[other()];
+    $("hintMe").textContent = "Português → " + o.name;
+    $("hintThem").textContent = o.name + " → Português";
+    $("whoThem").textContent = o.label;
+    store.set("conv.other", other());
+  }
+  function renderPads() {
+    for (const side of ["me", "them"]) {
+      const pad = side === "me" ? $("padMe") : $("padThem");
+      const on = !!cur && cur.side === side;
+      pad.classList.toggle("on", on);
+      pad.disabled = (!!cur && !on) || (working && !on);
+      pad.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  function renderLive() {
+    const el = $("liveText");
+    el.textContent = "";
+    if (!cur) return;
+    el.append(document.createTextNode(cur.text.trimStart()));
+    if (cur.partial) { const s = document.createElement("span"); s.className = "partial"; s.textContent = " " + cur.partial; el.append(s); }
+  }
+  function renderLog() {
+    const box = $("log");
+    box.textContent = "";
+    if (!log.length) { const p = document.createElement("p"); p.className = "empty"; p.textContent = "As frases traduzidas aparecem aqui, a mais recente no alto."; box.append(p); return; }
+    for (const item of log) box.append(cardFor(item));
+  }
+  function cardFor(item) {
+    const c = document.createElement("article");
+    c.className = "card " + item.side;
+    const o = document.createElement("div"); o.className = "orig"; o.textContent = item.orig;
+    const t = document.createElement("div"); t.className = "tr"; t.textContent = item.tr;
+    const m = document.createElement("div"); m.className = "meta";
+    const tag = document.createElement("span"); tag.className = "tag";
+    tag.textContent = (LANGS[item.from]?.name || item.from) + " → " + (LANGS[item.to]?.name || item.to);
+    const play = document.createElement("button"); play.className = "play"; play.type = "button"; play.textContent = "Ouvir de novo";
+    play.onclick = () => speak(item.tr, item.to);
+    m.append(tag, play);
+    c.append(o, t, m);
+    item._el = t;
+    return c;
+  }
+
+  // ---------- Speaking ----------
+  function speak(text, lang) {
+    if (!text) return Promise.resolve();
+    const rate = parseFloat($("rate").value);
+    if (T) {
+      return T.speak(text, { language: LANGS[lang]?.tts || lang, rate, voice: $("voice").value }).catch((e) => {
+        if (e.code === "not_granted" || e.code === "unavailable") { T = null; setStatus("A leitura em voz alta está desligada para esta página. A tradução fica escrita."); }
+        else if (e.code === "rate_limited") setStatus("Muitas leituras seguidas. Aguarde um pouco e toque em “Ouvir de novo”.");
+        else if (e.code === "no_gesture") setStatus("Toque em “Ouvir de novo” para escutar.");
+      });
+    }
+    if ("speechSynthesis" in window) {
+      return new Promise((res) => {
+        try {
+          speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = LANGS[lang]?.dict || lang; u.rate = rate;
+          u.onend = u.onerror = () => res();
+          speechSynthesis.speak(u);
+        } catch { res(); }
+      });
+    }
+    return Promise.resolve();
+  }
+  function stopSpeaking() {
+    try { T?.stop().catch(() => {}); } catch {}
+    try { window.speechSynthesis?.cancel(); } catch {}
+  }
+
+  // ---------- Translating ----------
+  async function translateAndSpeak(text, side) {
+    const { from, to } = dir(side);
+    const item = { side, from, to, orig: text, tr: "…", at: Date.now() };
+    log.unshift(item);
+    log = log.slice(0, 40);
+    renderLog();
+    if (!S) { item._el.textContent = "A tradução precisa do Claude, que não está disponível nesta visualização."; working = false; renderPads(); return; }
+    working = true; renderPads();
+    setStatus("Traduzindo…");
+    const prompt =
+      "You are a live interpreter in a spoken conversation. Translate the utterance below from " +
+      (LANGS[from].english || "Brazilian Portuguese") + " into " + (LANGS[to].english || "Brazilian Portuguese") +
+      ". It was captured by speech-to-text, so silently fix obvious recognition slips. Keep the speaker's tone, use natural spoken wording, " +
+      "keep names as they are, and reply with the translation only: no quotes, notes or explanations.\n\n<utterance>\n" + text + "\n</utterance>";
+    try {
+      const { text: out } = await S(prompt, { modelTier: "quick", cache: false, onText: ({ text: t }) => { item._el.textContent = t; } });
+      item.tr = out.trim();
+      item._el.textContent = item.tr;
+      store.set("conv.log", log.map(({ _el, ...r }) => r));
+      setStatus("Falando a tradução…");
+      working = false; renderPads();
+      await speak(item.tr, to);
+      if (!cur && !working) setStatus("Toque em quem vai falar.");
+    } catch (e) {
+      item.tr = e.text || "";
+      item._el.textContent = e.text || "Não foi possível traduzir.";
+      setStatus(e.code === "not_granted" ? "Sem permissão para usar o Claude nesta página. Permita no menu Permissões do artefato."
+        : e.code === "rate_limited" ? "Muitas traduções seguidas. Aguarde alguns segundos."
+        : "A tradução falhou. Tente de novo.");
+      if (e.code === "not_granted") S = null;
+      working = false; renderPads();
+    }
+  }
+
+  // ---------- Listening ----------
+  function armSilence() {
+    clearTimeout(silenceTimer);
+    const ms = parseFloat($("pause").value) * 1000;
+    silenceTimer = setTimeout(() => { if (cur && (cur.text.trim() || cur.partial)) D.stop().catch(() => {}); }, ms);
+  }
+  function onPad(side) {
+    if (cur) { if (cur.side === side) { clearTimeout(silenceTimer); D?.stop().catch(() => {}); } return; }
+    if (working) return;
+    if (!D) { $("typed").focus(); return; }
+    stopSpeaking();
+    const { from } = dir(side);
+    const opts = noLangFor[from] ? {} : { language: LANGS[from].dict };
+    cur = { side, from, text: "", partial: "" };
+    renderPads(); renderLive();
+    setStatus(side === "me" ? "Ouvindo você…" : "Ouvindo a outra pessoa…", true);
+    D.start(opts).catch((e) => {
+      if (e.code === "unavailable" && opts.language) { noLangFor[from] = true; setStatus("O ditado em " + LANGS[from].name + " não está disponível. Toque de novo para usar o idioma padrão."); }
+      else if (e.code === "not_granted") { setStatus("Microfone não autorizado. Use o campo de texto abaixo."); D = null; $("noMic").hidden = false; }
+      else if (e.code === "dismissed") setStatus("Toque de novo e permita o microfone.");
+      else if (e.code === "rate_limited") setStatus("O microfone está ocupado. Tente em alguns segundos.");
+      else if (e.code !== "stopped") setStatus("O microfone falhou. Tente de novo.");
+      if (cur && !D?.active?.()) { cur = null; renderPads(); renderLive(); }
+    });
+  }
+
+  function wireDictation() {
+    D.onPartial(({ text }) => { if (!cur) return; cur.partial = text; renderLive(); if (text) armSilence(); });
+    D.onFinal(({ text }) => { if (!cur) return; cur.text += text; cur.partial = ""; renderLive(); armSilence(); });
+    D.onState(({ state }) => {
+      if (state === "listening" && cur) setStatus(cur.side === "me" ? "Ouvindo você… faça uma pausa ao terminar." : "Ouvindo a outra pessoa…", true);
+      if (state === "idle" && cur) {
+        clearTimeout(silenceTimer);
+        const c = cur; cur = null;
+        const text = (c.text + (c.partial ? " " + c.partial : "")).trim();
+        renderPads(); renderLive();
+        if (text) translateAndSpeak(text, c.side);
+        else setStatus("Não ouvi nada. Toque e fale de novo.");
+      }
+    });
+  }
+
+  // ---------- Wiring ----------
+  $("padMe").onclick = () => onPad("me");
+  $("padThem").onclick = () => onPad("them");
+  $("other").value = LANGS[store.get("conv.other", "en")] ? store.get("conv.other", "en") : "en";
+  $("other").onchange = updateLabels;
+  $("pause").value = store.get("conv.pause", 1.5);
+  $("rate").value = store.get("conv.rate", 1);
+  $("voice").value = store.get("conv.voice", "buttery");
+  const fmt = () => {
+    $("pauseVal").textContent = parseFloat($("pause").value).toFixed(1).replace(".", ",") + " s";
+    $("rateVal").textContent = parseFloat($("rate").value).toFixed(2).replace(/0$/, "").replace(".", ",") + "×";
+  };
+  $("pause").oninput = () => { fmt(); store.set("conv.pause", +$("pause").value); };
+  $("rate").oninput = () => { fmt(); store.set("conv.rate", +$("rate").value); };
+  $("voice").onchange = () => store.set("conv.voice", $("voice").value);
+  $("clear").onclick = () => { log = []; store.set("conv.log", []); renderLog(); };
+  $("typedForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const side = ev.submitter?.dataset.side || "me";
+    const text = $("typed").value.trim();
+    if (!text || working || cur) return;
+    $("typed").value = "";
+    stopSpeaking();
+    translateAndSpeak(text, side);
+  });
+
+  fmt(); updateLabels(); renderLog(); renderPads();
+
+  const use = (n) => window.claude?.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null);
+  Promise.all([use("dictation"), use("tts"), use("sample")]).then(([d, t, s]) => {
+    D = d; T = t; S = s;
+    if (D) wireDictation(); else $("noMic").hidden = false;
+    if (!S) setStatus("A tradução usa o Claude e só funciona com a página aberta no claude.ai.");
+  });
+})();
+</script>
